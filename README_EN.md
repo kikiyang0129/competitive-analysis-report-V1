@@ -19,7 +19,7 @@ This skill turns a vague request like “help me make a competitive analysis rep
 - Flexible competitor scope: supports direct competitors, indirect competitors, substitutes, and potential competitors.
 - Multiple analysis scenarios: strategy, product/UX, pricing, growth, procurement, AI capability comparison, and more.
 - Multi-format output: Markdown, HTML reports, PPT outlines, and competitor comparison tables.
-- Built-in HTML templates: creates structured visual reports without requiring extra template skills.
+- Built-in HTML visualization: creates insight cards, heatmaps, radar charts, quadrant charts, task flows, and priority boards without requiring extra template skills.
 ## Installation
 Install with the local Codex skill installer:
 ```bash
@@ -58,6 +58,7 @@ A standard report usually includes:
 - Differentiated feature summary
 - Must / Should / Could priority recommendations
 - Source list
+- HTML output automatically enhances summary cards, score heatmaps, competitor radar charts, quadrant charts, score rankings, task flows, and priority boards.
 The structure adapts by scenario. For example, pricing analysis adds plans, pricing tiers, value boundaries, and monetization recommendations. Growth analysis adds funnel breakdowns, channels, activation, retention, conversion, referrals, and experiment ideas.
 ## File Structure
 ```text
@@ -77,7 +78,7 @@ competitive-analysis-report-V1/
 ```
 ## Dependencies
 This skill does not require `beautiful-html-templates`.
-By default, it uses built-in HTML templates to generate structured, formatted reports. If other visual template skills are installed, they can be used as optional enhancements for specific tasks.
+By default, it uses built-in HTML templates to generate structured, formatted reports with visual charts. If other visual template skills are installed, they can be used as optional enhancements for specific tasks.
 `scripts/build_html_report.py` only depends on the Python standard library.
 ## Notes
 - The skill defaults to web verification for modern products, companies, pricing, features, market data, policies, AI capabilities, and industry updates. If you only want to analyze provided materials, say so in the task.
