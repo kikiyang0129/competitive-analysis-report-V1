@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{TITLE}}</title>
+<style>
+:root {
+  --bg: #f6f1e8;
+  --paper: #fffdf8;
+  --ink: #17202a;
+  --muted: #68717d;
+  --line: #d9d1c4;
+  --navy: #17324d;
+  --teal: #1e7f78;
+  --red: #b34034;
+  --blue: #2f67d8;
+  --shadow: 0 14px 40px rgba(23, 32, 42, 0.08);
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  line-height: 1.72;
+}
+a { color: var(--blue); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+.shell { display: grid; grid-template-columns: 280px minmax(0, 1fr); min-height: 100vh; }
+.toc {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow: auto;
+  padding: 28px 18px 32px;
+  border-right: 1px solid var(--line);
+  background: #efe8dc;
+}
+.toc-title { margin: 0 0 16px; color: var(--navy); font-size: 18px; font-weight: 800; }
+.toc a {
+  display: block;
+  color: #3a4652;
+  text-decoration: none;
+  border-left: 3px solid transparent;
+  padding: 5px 8px 5px 10px;
+  border-radius: 0 6px 6px 0;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.toc a:hover { background: rgba(47, 103, 216, 0.08); border-left-color: var(--blue); color: var(--navy); }
+.toc-l3 { margin-left: 12px; color: var(--muted) !important; }
+.report {
+  width: min(1180px, calc(100vw - 320px));
+  margin: 0 auto;
+  padding: 42px 36px 96px;
+}
+h1 {
+  margin: 0 0 14px;
+  padding: 34px 36px;
+  color: #fff;
+  background: var(--navy);
+  border: 1px solid #0e2238;
+  box-shadow: var(--shadow);
+  font-size: clamp(30px, 4.6vw, 54px);
+  line-height: 1.08;
+  font-weight: 900;
+}
+h2 {
+  margin: 46px 0 14px;
+  padding-top: 18px;
+  border-top: 3px solid var(--navy);
+  color: var(--navy);
+  font-size: 25px;
+  line-height: 1.25;
+}
+h3 { margin: 32px 0 10px; color: var(--teal); font-size: 19px; line-height: 1.35; }
+p { margin: 10px 0 16px; color: #283442; max-width: 920px; }
+ul, ol { margin: 10px 0 18px; padding-left: 24px; }
+li { margin: 5px 0; }
+code {
+  background: #eee3d2;
+  color: var(--red);
+  border: 1px solid #decdb5;
+  border-radius: 5px;
+  padding: 1px 5px;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 0.92em;
+}
+pre {
+  overflow: auto;
+  padding: 18px;
+  background: #17202a;
+  color: #f7f0e5;
+  border-radius: 8px;
+  border: 1px solid #0f1720;
+}
+pre code { background: transparent; color: inherit; border: 0; padding: 0; }
+.table-wrap {
+  margin: 18px 0 28px;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  box-shadow: var(--shadow);
+}
+table { width: 100%; min-width: 760px; border-collapse: collapse; font-size: 14px; }
+th, td { padding: 11px 12px; border-bottom: 1px solid #e7dfd2; vertical-align: top; }
+th {
+  background: var(--navy);
+  color: #fff;
+  font-weight: 800;
+  text-align: left;
+  white-space: nowrap;
+}
+tr:nth-child(even) td { background: #fbf6ed; }
+td:first-child, th:first-child { font-weight: 800; }
+.align-right { text-align: right; }
+td.score { font-weight: 900; color: var(--red); font-size: 16px; }
+.backtop {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: var(--navy);
+  color: #fff;
+  text-decoration: none;
+  box-shadow: var(--shadow);
+}
+@media (max-width: 980px) {
+  .shell { display: block; }
+  .toc { position: relative; height: auto; max-height: 42vh; border-right: 0; border-bottom: 1px solid var(--line); }
+  .report { width: 100%; padding: 26px 18px 74px; }
+  h1 { padding: 26px 22px; }
+  table { min-width: 720px; }
+}
+@media print {
+  body { background: #fff; }
+  .shell { display: block; }
+  .toc, .backtop { display: none; }
+  .report { width: 100%; padding: 0; }
+  h1 { color: #111; background: #fff; box-shadow: none; border: 0; padding: 0 0 18px; }
+  .table-wrap { box-shadow: none; break-inside: avoid; }
+  a { color: #111; }
+}
+</style>
+</head>
+<body>
+<div class="shell" id="top">
+{{TOC}}
+<main class="report">
+{{CONTENT}}
+</main>
+</div>
+<a class="backtop" href="#top" aria-label="回到顶部">↑</a>
+</body>
+</html>
