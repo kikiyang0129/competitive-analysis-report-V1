@@ -16,6 +16,7 @@ This skill turns a vague request like “help me make a competitive analysis rep
 - Clarify before writing: asks about industry/product/category, analysis goal, audience, competitor scope, dimensions, output format, length, and visual style.
 - Multiple-choice intake flow: uses A/B/C/D options whenever possible to reduce user effort.
 - Method-driven analysis: includes competitive analysis methods, workflow rules, reusable dimensions, and scenario-specific prompts.
+- Evidence guardrails: verifies volatile information by default, separates factual findings, analytical judgments, and recommendations, and flags unverified items.
 - Flexible competitor scope: supports direct competitors, indirect competitors, substitutes, and potential competitors.
 - Multiple analysis scenarios: strategy, product/UX, pricing, growth, procurement, AI capability comparison, and more.
 - Multi-format output: Markdown, HTML reports, PPT outlines, and competitor comparison tables.
@@ -57,6 +58,7 @@ A standard report usually includes:
 - UX issue list
 - Differentiated feature summary
 - Must / Should / Could priority recommendations
+- Scoring criteria, unverified items, and source-boundary notes
 - Source list
 - HTML output automatically enhances summary cards, score heatmaps, competitor radar charts, quadrant charts, score rankings, task flows, and priority boards.
 The structure adapts by scenario. For example, pricing analysis adds plans, pricing tiers, value boundaries, and monetization recommendations. Growth analysis adds funnel breakdowns, channels, activation, retention, conversion, referrals, and experiment ideas.
@@ -84,5 +86,7 @@ By default, it uses built-in HTML templates to generate structured, formatted re
 - The skill defaults to web verification for modern products, companies, pricing, features, market data, policies, AI capabilities, and industry updates. If you only want to analyze provided materials, say so in the task.
 - Do not include passwords, API keys, internal accounts, or private customer data in public reports or files prepared for GitHub.
 - Competitive analysis conclusions should include sources whenever possible, prioritizing official websites, help centers, pricing pages, announcements, financial reports, developer docs, official cases, and authoritative reports.
+- Features, prices, data, and dates without sources must not be presented as confirmed facts; mark them as unverified, to be validated, or uncertain.
+- Score matrices, radar charts, quadrant charts, and rankings are analytical model outputs. State the scoring criteria and do not present them as objective facts.
 ## License
 MIT
