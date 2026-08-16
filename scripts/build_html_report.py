@@ -10,6 +10,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import urlparse
 
 
 COLOR_SET = ["#1d4ed8", "#0f9f8f", "#f97316", "#7c3aed", "#64748b", "#dc2626"]
@@ -44,6 +45,7 @@ class RenderState:
     score_matrix_count: int = 0
     visual_panel_count: int = 0
     source_count: int = 0
+    path_detail_count: int = 0
     current_h2: str = ""
     current_h3: str = ""
     current_priority: str | None = None
@@ -140,7 +142,8 @@ def collect_signal(text: str, state: RenderState) -> None:
     if not state.task_steps:
         arrows = "→" in clean or "->" in clean
         if arrows and re.search(r"路径|流程|步骤|任务", state.current_h2 + state.current_h3 + clean):
-            parts = re.split(r"\s*(?:→|->)\s*", clean)
+            flow_text = re.split(r"(?:竞品差异|行动判断|体验亮点|明显短板|可借鉴点|建议|判断)[：:]", clean)[0]
+            parts = re.split(r"\s*(?:→|->)\s*", flow_text)
             parts = [part.strip(" .。；;") for part in parts if len(part.strip()) >= 2]
             if len(parts) >= 3:
                 state.task_steps.extend(parts[:7])
@@ -185,9 +188,98 @@ def matrix_values(matrix: ScoreMatrix) -> dict[int, list[float]]:
     return values
 
 
+def is_source_table(headers: list[str], title: str) -> bool:
+    text = " ".join([title, *headers]).lower()
+    has_source_context = bool(re.search(r"来源|参考资料|资料来源|source|reference", text))
+    has_link_column = bool(re.search(r"链接|url|网址|link|来源", text))
+    return has_source_context and has_link_column
+
+
+def first_url(text: str) -> str:
+    match = re.search(r"https?://[^\s|<>)，。；;]+", text)
+    return match.group(0) if match else ""
+
+
+def compact_url_label(url: str) -> str:
+    parsed = urlparse(url)
+    if not parsed.netloc:
+        return url
+    path = parsed.path.strip("/")
+    if not path:
+        return parsed.netloc
+    first_segment = path.split("/")[0]
+    return f"{parsed.netloc}/{first_segment}..."
+
+
+def clean_source_text(text: str) -> str:
+    text = re.sub(r"\[([^\]]+)\]\(https?://[^)]+\)", r"\1", text)
+    text = re.sub(r"https?://\S+", "", text)
+    return text.strip(" ，,。；;()（）")
+
+
+def render_source_cards(headers: list[str], rows: list[list[str]], title: str) -> str:
+    rows = normalize_rows(rows, len(headers))
+    id_idx = next((idx for idx, head in enumerate(headers) if re.search(r"编号|序号|id", head, re.I)), -1)
+    url_idx = next((idx for idx, head in enumerate(headers) if re.search(r"链接|url|网址|link", head, re.I)), -1)
+    title_idx = next((idx for idx, head in enumerate(headers) if re.search(r"来源|source|名称|资料", head, re.I)), -1)
+    if title_idx == url_idx:
+        title_idx = -1
+
+    cards = []
+    for row_number, row in enumerate(rows, start=1):
+        url = first_url(row[url_idx]) if 0 <= url_idx < len(row) else ""
+        if not url:
+            url = next((first_url(cell) for cell in row if first_url(cell)), "")
+        source_text = row[title_idx].strip() if 0 <= title_idx < len(row) else ""
+        if not source_text:
+            source_text = next((cell.strip() for cell in row if cell.strip() and not first_url(cell)), "")
+        source_text = clean_source_text(source_text)
+        if not source_text:
+            source_text = compact_url_label(url) if url else f"来源 {row_number}"
+        source_id = row[id_idx].strip() if 0 <= id_idx < len(row) and row[id_idx].strip() else f"S{row_number}"
+
+        meta_items = []
+        for idx, cell in enumerate(row):
+            if idx in {id_idx, title_idx, url_idx} or not cell.strip():
+                continue
+            cleaned = clean_source_text(cell)
+            if not cleaned:
+                continue
+            label = headers[idx] if idx < len(headers) and headers[idx] else "说明"
+            meta_items.append(
+                '<div class="source-meta-item">'
+                f'<span class="source-meta-label">{inline(label)}</span>'
+                f'<span class="source-meta-value">{inline(cleaned)}</span>'
+                "</div>"
+            )
+        link_html = (
+            f'<a class="source-link" href="{html.escape(url, quote=True)}" target="_blank" rel="noopener">{html.escape(compact_url_label(url))}</a>'
+            if url
+            else '<span class="source-link source-empty">未提供链接</span>'
+        )
+        cards.append(
+            '<article class="source-card">'
+            '<div class="source-card-head">'
+            f'<span class="source-index">{inline(source_id)}</span>'
+            f"<h3>{inline(source_text)}</h3>"
+            "</div>"
+            f"{link_html}"
+            f'<div class="source-meta">{"".join(meta_items)}</div>'
+            "</article>"
+        )
+    return (
+        f'<section class="source-list" aria-label="{html.escape(title or "来源列表", quote=True)}">'
+        '<div class="section-kicker">SOURCES</div>'
+        f'<div class="source-grid">{"".join(cards)}</div>'
+        "</section>"
+    )
+
+
 def render_table(headers: list[str], aligns: list[str], rows: list[list[str]], state: RenderState, title: str) -> str:
     state.table_count += 1
     rows = normalize_rows(rows, len(headers))
+    if is_source_table(headers, title):
+        return render_source_cards(headers, rows, title)
     if state.current_priority:
         for row in rows:
             if row and row[0].strip() and len(state.priority_items[state.current_priority]) < 6:
@@ -308,18 +400,35 @@ def render_quadrant(matrix: ScoreMatrix) -> str:
 
     values = matrix_values(matrix)
     points = []
+    legend = []
+    placed: list[tuple[float, float]] = []
+    offsets = [(0, 0), (12, -10), (-12, 10), (12, 12), (-12, -12), (0, 16), (0, -16), (16, 0)]
     for idx, col in enumerate(matrix.numeric_cols[:8]):
         x_value = score_value(matrix.rows[0][col]) or 1
         y_value = score_value(matrix.rows[1][col]) or 1
         x = map_x(x_value)
         y = map_y(y_value)
+        for dx, dy in offsets:
+            candidate_x = min(max(x + dx, left + 14), left + chart_w - 14)
+            candidate_y = min(max(y + dy, top + 14), top + chart_h - 14)
+            if all(math.hypot(candidate_x - px, candidate_y - py) >= 20 for px, py in placed):
+                x, y = candidate_x, candidate_y
+                break
+        placed.append((x, y))
         col_values = values.get(col, [])
         avg = sum(col_values) / max(1, len(col_values))
-        size = 7 + avg * 2.2
+        size = min(14, 7 + avg * 1.6)
         color = COLOR_SET[idx % len(COLOR_SET)]
         points.append(
             f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{size:.1f}" fill="{color}" class="quad-dot"/>'
-            f'<text x="{x + size + 4:.1f}" y="{y + 4:.1f}" class="quad-label">{html.escape(strip_inline(matrix.headers[col])[:10])}</text>'
+            f'<text x="{x:.1f}" y="{y + 4:.1f}" text-anchor="middle" class="quad-index">{idx + 1}</text>'
+        )
+        legend.append(
+            '<span>'
+            f'<i style="background:{color}">{idx + 1}</i>'
+            f'{inline(matrix.headers[col])}'
+            f'<small>{x_label} {x_value:.0f} / {y_label} {y_value:.0f}</small>'
+            '</span>'
         )
     return (
         '<article class="chart-card quadrant-card">'
@@ -333,6 +442,7 @@ def render_quadrant(matrix: ScoreMatrix) -> str:
         '<text x="54" y="264" class="axis-note">低</text><text x="296" y="264" class="axis-note">高</text>'
         '<text x="34" y="238" class="axis-note">低</text><text x="34" y="42" class="axis-note">高</text>'
         f'{"".join(points)}</svg>'
+        f'<div class="quad-legend">{"".join(legend)}</div>'
         "</article>"
     )
 
@@ -426,6 +536,125 @@ def render_task_flow(steps: list[str]) -> str:
     )
 
 
+def path_context(state: RenderState, text: str) -> bool:
+    heading_text = state.current_h2 + state.current_h3
+    return bool(re.search(r"关键任务|任务路径|流程对比|路径对比|路径|流程", heading_text + text))
+
+
+def source_context(state: RenderState, text: str) -> bool:
+    heading_text = state.current_h2 + state.current_h3
+    return bool(re.search(r"来源|参考资料|资料来源|source|reference", heading_text + text, re.I))
+
+
+def split_body_items(body: str) -> list[str]:
+    items = [item.strip(" 。；;") for item in re.split(r"[；;]\s*", body) if item.strip(" 。；;")]
+    if len(items) < 2 and len(body) > 90:
+        items = [item.strip(" 。；;") for item in re.split(r"(?<=。)\s*", body) if item.strip(" 。；;")]
+    return items
+
+
+def render_path_value(body: str) -> str:
+    if "→" in body or "->" in body:
+        steps = [step.strip(" 。；;") for step in re.split(r"\s*(?:→|->)\s*", body) if step.strip(" 。；;")]
+        if len(steps) >= 2:
+            return '<div class="step-chain-mini">' + "".join(f"<span>{inline(step)}</span>" for step in steps) + "</div>"
+    items = split_body_items(body)
+    if len(items) >= 2:
+        return "<ul>" + "".join(f"<li>{inline(item)}</li>" for item in items) + "</ul>"
+    return f"<p>{inline(body.strip())}</p>"
+
+
+def render_structured_paragraph(text: str, state: RenderState) -> str:
+    clean = strip_inline(text)
+    labels = ["竞品差异", "行动判断", "关键流程", "体验亮点", "明显短板", "可借鉴点", "建议", "判断"]
+    pattern = r"(" + "|".join(labels) + r")[：:]"
+    matches = list(re.finditer(pattern, clean))
+    if not path_context(state, clean) or ("→" not in clean and "->" not in clean and len(matches) < 2):
+        return ""
+
+    subject = ""
+    sections: list[tuple[str, str]] = []
+    lead = clean[: matches[0].start()].strip() if matches else clean
+    subject_match = re.match(r"^([^：:]{1,28})[：:]\s*(.+)$", lead)
+    if subject_match:
+        subject = subject_match.group(1).strip()
+        sections.append(("关键流程", subject_match.group(2).strip()))
+    elif lead:
+        sections.append(("关键流程", lead))
+
+    for idx, match in enumerate(matches):
+        label = match.group(1)
+        start = match.end()
+        end = matches[idx + 1].start() if idx + 1 < len(matches) else len(clean)
+        body = clean[start:end].strip(" 。；;")
+        if body:
+            sections.append((label, body))
+    if not sections:
+        return ""
+
+    field_html = []
+    for label, body in sections:
+        field_html.append(
+            '<div class="path-field">'
+            f"<h4>{inline(label)}</h4>"
+            f"{render_path_value(body)}"
+            "</div>"
+        )
+    subject_html = f'<div class="path-subject">{inline(subject)}</div>' if subject else ""
+    state.path_detail_count += 1
+    return (
+        '<section class="path-breakdown">'
+        f"{subject_html}"
+        f'<div class="path-grid">{"".join(field_html)}</div>'
+        "</section>"
+    )
+
+
+def render_list_item(item_text: str, state: RenderState) -> str:
+    clean = strip_inline(item_text)
+    if source_context(state, clean) and first_url(clean):
+        url = first_url(clean)
+        base = clean_source_text(clean)
+        base = re.sub(r"链接[：:]\s*$", "", base).strip()
+        title, desc = base, ""
+        if "：" in base or ":" in base:
+            title, desc = re.split(r"[：:]", base, maxsplit=1)
+        id_match = re.match(r"^(S\d+|\d+)[\s.、-]+(.+)$", title.strip(), re.I)
+        source_id = id_match.group(1) if id_match else "SRC"
+        source_title = id_match.group(2).strip() if id_match else title.strip()
+        desc = re.sub(r"^用于", "", desc).strip(" 。；;")
+        meta_html = (
+            '<div class="source-meta"><div class="source-meta-item">'
+            '<span class="source-meta-label">用途</span>'
+            f'<span class="source-meta-value">{inline(desc)}</span>'
+            "</div></div>"
+            if desc
+            else ""
+        )
+        return (
+            '<li class="source-card">'
+            '<div class="source-card-head">'
+            f'<span class="source-index">{inline(source_id)}</span>'
+            f"<h3>{inline(source_title or compact_url_label(url))}</h3>"
+            "</div>"
+            f'<a class="source-link" href="{html.escape(url, quote=True)}" target="_blank" rel="noopener">{html.escape(compact_url_label(url))}</a>'
+            f"{meta_html}"
+            "</li>"
+        )
+    match = re.match(r"^([^：:]{2,18})[：:]\s*(.+)$", clean)
+    if path_context(state, clean) and match:
+        label = match.group(1).strip()
+        body = match.group(2).strip()
+        state.path_detail_count += 1
+        return (
+            '<li class="structured-li">'
+            f'<strong class="li-label">{inline(label)}</strong>'
+            f'<div class="li-body">{render_path_value(body)}</div>'
+            "</li>"
+        )
+    return f"<li>{inline(item_text)}</li>"
+
+
 def render_hero_stats(state: RenderState) -> str:
     stats = [
         ("章节", str(max(0, state.heading_count - 1)), "分析结构"),
@@ -458,7 +687,8 @@ def markdown_to_html(markdown: str) -> tuple[str, str, str, str, str]:
         if para:
             text = " ".join(para).strip()
             collect_signal(text, state)
-            html_parts.append("<p>" + inline(text) + "</p>")
+            structured = render_structured_paragraph(text, state)
+            html_parts.append(structured if structured else "<p>" + inline(text) + "</p>")
             para = []
 
     def close_list() -> None:
@@ -529,11 +759,17 @@ def markdown_to_html(markdown: str) -> tuple[str, str, str, str, str]:
             close_para()
             if list_mode != "ul":
                 close_list()
-                html_parts.append("<ul>")
+                if source_context(state, stripped):
+                    list_class = ' class="source-list source-list-inline"'
+                elif path_context(state, stripped):
+                    list_class = ' class="path-list"'
+                else:
+                    list_class = ""
+                html_parts.append(f"<ul{list_class}>")
                 list_mode = "ul"
             item_text = re.sub(r"^-\s+", "", stripped)
             collect_signal(item_text, state)
-            html_parts.append(f"<li>{inline(item_text)}</li>")
+            html_parts.append(render_list_item(item_text, state))
             i += 1
             continue
 
@@ -541,11 +777,17 @@ def markdown_to_html(markdown: str) -> tuple[str, str, str, str, str]:
             close_para()
             if list_mode != "ol":
                 close_list()
-                html_parts.append("<ol>")
+                if source_context(state, stripped):
+                    list_class = ' class="source-list source-list-inline"'
+                elif path_context(state, stripped):
+                    list_class = ' class="path-list"'
+                else:
+                    list_class = ""
+                html_parts.append(f"<ol{list_class}>")
                 list_mode = "ol"
             item_text = re.sub(r"^\d+\.\s+", "", stripped)
             collect_signal(item_text, state)
-            html_parts.append(f"<li>{inline(item_text)}</li>")
+            html_parts.append(render_list_item(item_text, state))
             i += 1
             continue
 
@@ -564,7 +806,8 @@ def markdown_to_html(markdown: str) -> tuple[str, str, str, str, str]:
     toc_html.append("</nav>")
 
     lead_visuals = render_summary_cards(state.summary_items or [])
-    tail_visuals = render_task_flow(state.task_steps or []) + render_priority_board(state.priority_items or {})
+    task_flow = "" if state.path_detail_count else render_task_flow(state.task_steps or [])
+    tail_visuals = task_flow + render_priority_board(state.priority_items or {})
     content = lead_visuals + "\n".join(html_parts) + tail_visuals
     return state.title, state.subtitle, content, "".join(toc_html), render_hero_stats(state)
 

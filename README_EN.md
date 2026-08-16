@@ -20,7 +20,7 @@ This skill turns a vague request like “help me make a competitive analysis rep
 - Flexible competitor scope: supports direct competitors, indirect competitors, substitutes, and potential competitors.
 - Multiple analysis scenarios: strategy, product/UX, pricing, growth, procurement, AI capability comparison, and more.
 - Multi-format output: Markdown, HTML reports, PPT outlines, and competitor comparison tables.
-- Built-in HTML visualization: creates insight cards, heatmaps, radar charts, quadrant charts, task flows, and priority boards without requiring extra template skills.
+- Built-in HTML visualization: creates insight cards, heatmaps, radar charts, quadrant charts, structured task paths, compact source cards, and priority boards without requiring extra template skills.
 ## Installation
 Install with the local Codex skill installer:
 ```bash
@@ -60,7 +60,7 @@ A standard report usually includes:
 - Must / Should / Could priority recommendations
 - Scoring criteria, unverified items, and source-boundary notes
 - Source list
-- HTML output automatically enhances summary cards, score heatmaps, competitor radar charts, quadrant charts, score rankings, task flows, and priority boards.
+- HTML output automatically enhances summary cards, score heatmaps, competitor radar charts, quadrant charts, score rankings, structured task paths, source cards, and priority boards.
 The structure adapts by scenario. For example, pricing analysis adds plans, pricing tiers, value boundaries, and monetization recommendations. Growth analysis adds funnel breakdowns, channels, activation, retention, conversion, referrals, and experiment ideas.
 ## File Structure
 ```text
