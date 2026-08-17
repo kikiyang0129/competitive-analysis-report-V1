@@ -126,19 +126,48 @@ def normalize_rows(rows: list[list[str]], size: int) -> list[list[str]]:
     return [row + [""] * max(0, size - len(row)) for row in rows]
 
 
+def priority_key(raw: str) -> str:
+    clean = strip_inline(raw).strip().lower()
+    clean = re.sub(r"[：:\-\s]+$", "", clean)
+    return PRIORITY_KEYS.get(clean, PRIORITY_KEYS.get(strip_inline(raw).strip(), ""))
+
+
+def add_priority_item(state: RenderState, key: str, item: str, limit: int = 8) -> None:
+    item = strip_inline(item).strip(" 。；;")
+    if not key or not item or key not in state.priority_items:
+        return
+    if item in state.priority_items[key]:
+        return
+    if len(state.priority_items[key]) < limit:
+        state.priority_items[key].append(item)
+
+
+def priority_segments(text: str) -> list[tuple[str, str]]:
+    pattern = re.compile(r"(Must|Should|Could|必须做|应该做|可以做|必须|应该|可以)[：:\-\s]+", re.I)
+    matches = list(pattern.finditer(text))
+    segments: list[tuple[str, str]] = []
+    for idx, match in enumerate(matches):
+        key = priority_key(match.group(1))
+        start = match.end()
+        end = matches[idx + 1].start() if idx + 1 < len(matches) else len(text)
+        body = text[start:end].strip(" 。；;")
+        if key and body:
+            segments.append((key, body))
+    return segments
+
+
 def collect_signal(text: str, state: RenderState) -> None:
     clean = strip_inline(text)
     if not clean:
         return
     if len(state.summary_items or []) < 6 and re.search(r"摘要|结论|关键发现|核心发现", state.current_h2 + state.current_h3):
         state.summary_items.append(clean)
-    priority_match = re.match(r"^(Must|Should|Could|必须做|应该做|可以做|必须|应该|可以)[：:\-\s]+(.+)$", clean, re.I)
-    if priority_match:
-        key = PRIORITY_KEYS.get(priority_match.group(1).lower(), PRIORITY_KEYS.get(priority_match.group(1), ""))
-        if key and len(state.priority_items[key]) < 6:
-            state.priority_items[key].append(priority_match.group(2).strip())
-    elif state.current_priority and len(state.priority_items[state.current_priority]) < 6:
-        state.priority_items[state.current_priority].append(clean)
+    segments = priority_segments(clean)
+    if segments:
+        for key, body in segments:
+            add_priority_item(state, key, body)
+    elif state.current_priority:
+        add_priority_item(state, state.current_priority, clean)
     if not state.task_steps:
         arrows = "→" in clean or "->" in clean
         if arrows and re.search(r"路径|流程|步骤|任务", state.current_h2 + state.current_h3 + clean):
@@ -193,6 +222,57 @@ def is_source_table(headers: list[str], title: str) -> bool:
     has_source_context = bool(re.search(r"来源|参考资料|资料来源|source|reference", text))
     has_link_column = bool(re.search(r"链接|url|网址|link|来源", text))
     return has_source_context and has_link_column
+
+
+def is_priority_table(headers: list[str], title: str) -> bool:
+    text = " ".join([title, *headers])
+    has_priority = bool(re.search(r"优先级|priority|Must|Should|Could", text, re.I))
+    has_item = bool(re.search(r"建议|动作|说明|事项|功能|任务|item|action", text, re.I))
+    return has_priority and has_item
+
+
+def extract_priority_table(headers: list[str], rows: list[list[str]], state: RenderState) -> None:
+    if not is_priority_table(headers, state.current_h2 + state.current_h3):
+        return
+    pri_idx = next((idx for idx, head in enumerate(headers) if re.search(r"优先级|priority", head, re.I)), -1)
+    if pri_idx < 0:
+        pri_idx = next(
+            (
+                idx
+                for idx, head in enumerate(headers)
+                if re.search(r"Must|Should|Could|必须|应该|可以", head, re.I)
+            ),
+            0,
+        )
+    title_idx = next(
+        (
+            idx
+            for idx, head in enumerate(headers)
+            if idx != pri_idx and re.search(r"建议|事项|功能|任务|标题|item", head, re.I)
+        ),
+        -1,
+    )
+    desc_idx = next(
+        (
+            idx
+            for idx, head in enumerate(headers)
+            if idx not in {pri_idx, title_idx} and re.search(r"动作|说明|描述|理由|内容|action|detail", head, re.I)
+        ),
+        -1,
+    )
+    for row in normalize_rows(rows, len(headers)):
+        if pri_idx >= len(row):
+            continue
+        key = priority_key(row[pri_idx])
+        if not key:
+            continue
+        title = row[title_idx].strip() if 0 <= title_idx < len(row) else ""
+        desc = row[desc_idx].strip() if 0 <= desc_idx < len(row) else ""
+        if title and desc:
+            item = f"{title}：{desc}"
+        else:
+            item = title or desc or "；".join(cell.strip() for idx, cell in enumerate(row) if idx != pri_idx and cell.strip())
+        add_priority_item(state, key, item)
 
 
 def first_url(text: str) -> str:
@@ -278,6 +358,7 @@ def render_source_cards(headers: list[str], rows: list[list[str]], title: str) -
 def render_table(headers: list[str], aligns: list[str], rows: list[list[str]], state: RenderState, title: str) -> str:
     state.table_count += 1
     rows = normalize_rows(rows, len(headers))
+    extract_priority_table(headers, rows, state)
     if is_source_table(headers, title):
         return render_source_cards(headers, rows, title)
     if state.current_priority:
